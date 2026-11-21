@@ -1,0 +1,9 @@
+Title: configs: build the OV9734 camera sensor for the 7.3 series
+
+The 7.3 Surface fragment selects the OV7251, OV5693 and OV8865 sensor drivers, but inherits OV9734 from the base configuration. A build whose base disables OV9734 consequently lacks the driver for the Surface Laptop 1/2 color sensor, even with the IPU3 drivers enabled. Select `CONFIG_VIDEO_OV9734=m` alongside the other sensors and update the SHA-256 and BLAKE2b checksums for the same fragment in Arch's PKGBUILD. The current checked-in Arch and Debian full configs and the tested Fedora 45 kernel already select this module.
+
+This controls whether `ov9734.ko` is built. It does not add the driver power/probe fixes tracked in [kernel#186](https://github.com/linux-surface/kernel/pull/186) and [#2401](https://github.com/linux-surface/linux-surface/issues/2401), add desktop libcamera support or change the device matrix.
+
+Validation: started from the project's Debian amd64 base with only `VIDEO_OV9734` deliberately disabled, merged the old/new fragments separately with the kernel's `scripts/kconfig/merge_config.sh` and ran `olddefconfig` against `linux-surface/kernel@96cd24ea`. The **only** effective config difference was `# CONFIG_VIDEO_OV9734 is not set` → `CONFIG_VIDEO_OV9734=m`. Verified the actual Arch `source[4]=surface.config` matches both new checksum entries, and `bash -n pkg/arch/kernel/PKGBUILD` and `git diff --check` pass. No package release bump or generated kernel-patch edits.
+
+The fragment is consumed by [Arch](https://github.com/linux-surface/linux-surface/blob/a88004b01334adfd1d2957dc646a2a2664ddebb8/pkg/arch/kernel/PKGBUILD#L145), [Debian](https://github.com/linux-surface/linux-surface/blob/a88004b01334adfd1d2957dc646a2a2664ddebb8/.github/scripts/package/debian.sh#L113) and [Fedora](https://github.com/linux-surface/linux-surface/blob/a88004b01334adfd1d2957dc646a2a2664ddebb8/pkg/fedora/kernel-surface/build-linux-surface.py#L116).

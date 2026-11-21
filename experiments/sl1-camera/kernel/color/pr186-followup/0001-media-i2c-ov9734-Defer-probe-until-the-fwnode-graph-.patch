@@ -1,0 +1,58 @@
+From 8e78444703c64b90e08eda16dafdcf90db96a4e9 Mon Sep 17 00:00:00 2001
+From: Sam <sammydirksz@gmail.com>
+Date: Wed, 18 Nov 2026 16:52:24 +0100
+Subject: [PATCH] media: i2c: ov9734: Defer probe until the fwnode graph
+ endpoint exists
+
+On IPU3 machines the endpoint is created by ipu-bridge when ipu3-cio2
+probes. If ov9734 probes first, ov9734_check_hwcfg() returns -ENXIO and
+the sensor never binds without a manual re-probe. Return -EPROBE_DEFER
+instead, as the other bridge-backed sensor drivers do.
+
+Tested on a Surface Laptop 2 with 7.3.4-surface, where ov9734 loads about
+0.3 s before ipu3-cio2 and now binds without a manual re-probe.
+
+Assisted-by: Claude Fable 5.2
+Signed-off-by: Sam <sammydirksz@gmail.com>
+Patchset: cameras
+---
+ drivers/media/i2c/ov9734.c | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/media/i2c/ov9734.c b/drivers/media/i2c/ov9734.c
+index 984d10e0cae8051abcb072c0aa24c73136e56016..fd0d5c9fbd0c810d83361f4ffc2d07b56603189d 100644
+--- a/drivers/media/i2c/ov9734.c
++++ b/drivers/media/i2c/ov9734.c
+@@ -887,9 +887,14 @@ static int ov9734_check_hwcfg(struct device *dev)
+ 	if (!fwnode)
+ 		return -ENXIO;
+ 
++	/*
++	 * Sometimes the fwnode graph is initialized by the bridge driver.
++	 * Bridge drivers doing this may also add GPIO mappings, wait for this.
++	 */
+ 	ep = fwnode_graph_get_next_endpoint(fwnode, NULL);
+ 	if (!ep)
+-		return -ENXIO;
++		return dev_err_probe(dev, -EPROBE_DEFER,
++				     "waiting for fwnode graph endpoint\n");
+ 
+ 	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+ 	fwnode_handle_put(ep);
+@@ -945,11 +950,9 @@ static int ov9734_probe(struct i2c_client *client)
+ 	int ret;
+ 
+ 	ret = ov9734_check_hwcfg(&client->dev);
+-	if (ret) {
+-		dev_err(&client->dev, "failed to check HW configuration: %d",
+-			ret);
+-		return ret;
+-	}
++	if (ret)
++		return dev_err_probe(&client->dev, ret,
++				     "failed to check HW configuration\n");
+ 
+ 	ov9734 = devm_kzalloc(&client->dev, sizeof(*ov9734), GFP_KERNEL);
+ 	if (!ov9734)
+
+base-commit: bdd5d113c5fd88e98c38a8d0c7ff6499dcc6512b

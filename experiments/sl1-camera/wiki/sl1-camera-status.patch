@@ -1,0 +1,74 @@
+diff --git a/Camera-Support.md b/Camera-Support.md
+index 79d9364507ff68282eaecd5f08a44b2ab6dd528a..13bd880a2759489236ed313aa828645a0ea89d8a 100644
+--- a/Camera-Support.md
++++ b/Camera-Support.md
+@@ -27,7 +27,7 @@ If you have successfully enabled your camera on a device not yet in this table,
+ | Surface Book 1		| IPU3		| OV5693 ✅ 	| OV8865 ✅	|  OV7251 🚫 	|
+ | Surface Book 2 13"		| IPU3		| OV5693 ✅ 	| OV8865 ✅	|  OV7251 🚫 	|
+ | Surface Book 3		| IPU4P		| OV5693 🚫 	| OV8865 🚫	|  OV7251 🚫 	|
+-| Surface Laptop 1		| IPU3		| OV9734 🚫 	| N/A		|  OV7251 🚫 	|
++| Surface Laptop 1		| IPU3		| OV9734 (✅)³ 	| N/A		|  OV7251 (✅)³ 	|
+ | Surface Laptop 2		| IPU3		| OV9734 🚫 	| N/A		|  OV7251 🚫 	|
+ | Surface Laptop 3 (Intel)	| IPU4P		| OV9734 🚫 	| N/A		|  OV7251 🚫 	|
+ | Surface Laptop 3 (AMD)	| (USB/UVC)	| OV5693 ✅ 	| N/A		|  OV7251 ✅ 	|
+@@ -38,6 +38,7 @@ If you have successfully enabled your camera on a device not yet in this table,
+ 
+ * ¹ as of now (Aug. 2026) Surface Go 4 Front Camera only works with patch from https://github.com/linux-surface/linux-surface/pull/2171/changes , but it is working and to be expected to reach the surface kernel in the future.
+ * ² as of Oct. 2026 the Surface Pro 7+ cameras only work with the patches from https://github.com/linux-surface/linux-surface/pull/2252 , see [Surface Pro 7+ - Cameras](#surface-pro-7---cameras) below.
++* ³ Surface Laptop 1: verified with additional kernel and userspace changes; see [Surface Laptop 1 cameras](#surface-laptop-1-cameras).
+ 
+ **The Surface Pro 7, Surface Laptop 3 (Intel) and the Surface Book 3 use an IPU4P which can not be supported at this time**
+ 
+@@ -86,6 +87,15 @@ None of the three cameras works with the stock linux-surface kernel (6.19.8-surf
+ - **IR (OV7251).** Two separate problems as well. Its power-enable GPIO is registered as `avdd`, but `ov7251` requests `vdda`, so the sensor's first I2C write fails with `-121` and it never probes at all. Once it does probe, the IR illuminator hangs off the sensor's strobe output, and mainline's `ov7251` init programs that strobe with pattern `0xa5` (`10100101`), so the LED fires on alternate frames and half the frames come out dark; Windows programs `0xff`. #2252 fixes both.
+ - **Rear autofocus.** On 6.19 the `dw9719` VCM driver no longer binds ([#2225](https://github.com/linux-surface/linux-surface/issues/2225); fixed upstream, backport in [#2123](https://github.com/linux-surface/linux-surface/pull/2123)). On the Pro 7+ this only loses focus control; the cameras still enumerate.
+ 
++#### Surface Laptop 1 cameras
++
++The original Surface Laptop has two front sensors on Intel IPU3. Both have delivered images on a physical SL1, but the complete stack is not included in the tested Fedora 45 linux-surface packages.
++
++* **Color (OV9734):** the kernel needs a CSI endpoint and working clock/reset sequencing. The SL1 test used the [7.3 patches in #2401](https://github.com/linux-surface/linux-surface/issues/2401), including deferred probe when the endpoint is not ready. [Kernel PR #186](https://github.com/linux-surface/kernel/pull/186) proposes a related implementation. Userspace also needs the [libcamera OV9734 IPU3 changes](https://patchwork.libcamera.org/cover/28869/). The public series, adapted to current libcamera, delivered 1280×704. A further single-stream change delivered native 1280×720 at 30 fps with a 33.3 ms frame-duration request. A separately tuned stack also delivered 720p in GNOME Camera.
++* **Infrared (OV7251):** raw monochrome capture and the IR illuminator are separate features. Desktop apps need a source that can unpack the IPU3 grayscale format. The SL1 test used a PipeWire bridge and a backport of the [exposure-synchronized strobe patch](https://lore.kernel.org/linux-media/20261113024059.1087031-9-antoine.pichot@gmail.com/). It delivered 640×480 at 30 fps in ambient light, or 15 illuminated frames per second because the sensor pulses on alternate exposures. The emitter switched off when capture stopped, including after a client crash. This test did not cover face authentication.
++
++The [tested patch versions and capture results](https://github.com/Dvaderfun/linux-surface/tree/sl1-camera-reference/experiments/sl1-camera) are available for comparison. The tested CIO2 driver streams one sensor at a time. Close the other camera client before switching. To diagnose color, check for the OV9734 with `cam -l`, then capture frames with `cam -c '<ID from cam -l>' -s role=viewfinder,width=640,height=480 --capture=30`. To check what desktop applications can select, look under **Video → Sources** in `wpctl status`. An OV7251 entry in `media-ctl -p` by itself does not establish desktop or illuminator support.
++
+ ### IPU3 Firmware
+ 
+ The IPU3 used by the Surface requires some firmware to support the devices which is loaded at runtime. 
+diff --git a/Supported-Devices-and-Features.md b/Supported-Devices-and-Features.md
+index 108b3d603943868c17bf5f9b6a16dd5ea4649f74..5a50b3f33546c63d9c36d67dd228b8b14bb96117 100644
+--- a/Supported-Devices-and-Features.md
++++ b/Supported-Devices-and-Features.md
+@@ -129,7 +129,7 @@ Not all features are supported equally on all devices. Please check the dedicate
+ |Sensors          | ✓    | ✓     | ✓        | ✓        | ✓         | ?        | ✓       | ✓     | ✓      | ✓      | ✓      |
+ |Battery Status   | ✓⁸   | ✓⁸    | ✓⁹       | ✓⁹       | ✓⁹        | ✓⁹       | ✓       | ✓⁹    | ✓¹⁸    | ✓¹⁸     | ✓      |
+ |Performance Modes| ✓⁸   | ✓⁸    | ✓⁹       | ✓⁹       | ✓⁹        | ✓⁹       | ✓²⁰     | ✓⁹    | ✓¹⁸    | ✓¹⁸     | ?      |
+-|Cameras          | ❌    | ❌    | ✓        | ✓        | ✓         | ✓        | ✓       | ✓     | ✓      | ✓      | ✓      |
++|Cameras          | 🧪³³    | ❌    | ✓        | ✓        | ✓         | ✓        | ✓       | ✓     | ✓      | ✓      | ✓      |
+ |Fingerprint      |      |       |          |          |           |          |         |       |        | ✓<sup>29</sup>      |        |
+ 
+ * ¹ Requires linux-surface kernel
+@@ -160,6 +160,8 @@ Not all features are supported equally on all devices. Please check the dedicate
+ * ³⁰ Front, rear and IR cameras work with the patches from [#2252](https://github.com/linux-surface/linux-surface/pull/2252), not yet in the linux-surface kernel. With the stock kernel none of the three works. See [[Camera Support|Camera-Support#surface-pro-7---cameras]]
+ * ³¹ May work with patches from https://github.com/linux-surface/linux-surface/discussions/1353 , not yet in the kernel and may require more work done , highly experimental .
+ * ³² Rear camera requires linux-surface kernel >=6.17. Front camera requires linux 7.4+, which is not in the linux-surface kernel yet. IR camera is not supported.
++* ³³ Surface Laptop 1: color and illuminated IR capture verified with additional kernel and userspace changes. See [[Camera Support|Camera-Support#surface-laptop-1-cameras]].
++
+ ## Features provided by the Surface Aggregator Module
+ 
+ Some features provided by the Surface Aggregator Module (specifically faster clipboard detachment, discrete GPU power control on SB2/SB3, and performance modes) may need additional configuration.
+diff --git a/Surface-Laptop.md b/Surface-Laptop.md
+index a91d7dbbde788785b06cce91f5fca3ddbdf61a26..cdc99f7405dfc50a163aacb26e3643ce995a762c 100644
+--- a/Surface-Laptop.md
++++ b/Surface-Laptop.md
+@@ -6,6 +6,10 @@ A little bit of background:
+ From what I gathered, there is a sensor called GEN1. And as soon it hits 52°C the CPU instantly throttles to 400MHz (the minimum frequency) for several seconds until temps have dropped. From what I found out this is part of the hardware protection and is obviously meant to protect the Pc from damage. However the reaction coded into the firmware is a massive over correction and there is a much better way to fix this. In essence we can tell the Surface Laptop to slow down long before it gets to that threshold, which gives us stable and prolonged performance. All of the tests were performed in the balanced profile setting.
+ 
+ 
++## Cameras
++
++The front color and infrared cameras have been tested with additional kernel and userspace changes. See [[Surface Laptop 1 camera support|Camera-Support#surface-laptop-1-cameras]] for dependencies, tested modes and current limitations.
++
+ ## Thermal Throttling 
+ That's right! Under prolonged  moderate to heavy load I found my pc thermal throttle on me (ceckertz155). In this article I will walk you through the steps experience to find out if you do too and what to do about it. First get ThermalMonitor and make sure your in the power group (you need to in order to use ThermalMonitor):
+ `sudo gpasswd -a $USER power `

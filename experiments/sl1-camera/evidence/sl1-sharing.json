@@ -1,0 +1,22 @@
+{
+  "sharing_tests": [
+    {
+      "first": "color",
+      "second": "infrared",
+      "owner_frames": 38,
+      "owner_fps": 30.3,
+      "second_blocked_during_overlap": true,
+      "second_works_after_release": true,
+      "passed": true
+    },
+    {
+      "first": "infrared",
+      "second": "color",
+      "owner_frames": 19,
+      "owner_fps": 15.0,
+      "second_blocked_during_overlap": true,
+      "second_works_after_release": true,
+      "passed": true
+    }
+  ]
+}

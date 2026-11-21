@@ -1,0 +1,25 @@
+{
+  "before": {
+    "exposure": 504,
+    "strobe_output_enable": 0,
+    "analogue_gain": 16
+  },
+  "active": {
+    "exposure": 504,
+    "strobe_output_enable": 1,
+    "analogue_gain": 128
+  },
+  "after_forced_exit": {
+    "exposure": 504,
+    "strobe_output_enable": 0,
+    "analogue_gain": 128
+  },
+  "settings_restored": {
+    "exposure": 504,
+    "strobe_output_enable": 0,
+    "analogue_gain": 16
+  },
+  "reopened": "Opening Surface Infrared (monochrome) for 12 frames \u2026\nPASS: 12 timestamped 640\u00d7480 frames through PipeWire at 15.0 fps; sample range 0\u2013253/255. No images saved.",
+  "returncode": 0,
+  "idle": "suspended"
+}

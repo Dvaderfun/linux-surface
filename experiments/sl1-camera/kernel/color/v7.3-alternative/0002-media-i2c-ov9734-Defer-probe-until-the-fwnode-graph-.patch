@@ -1,0 +1,56 @@
+From c24aef1c9e23cfa013444b4c1a68cc5a9d94f0ba Mon Sep 17 00:00:00 2001
+From: Sam <sammydirksz@gmail.com>
+Date: Wed, 18 Nov 2026 16:52:24 +0100
+Subject: [PATCH 2/3] media: i2c: ov9734: Defer probe until the fwnode graph
+ endpoint exists
+
+On IPU3 machines the endpoint is created by ipu-bridge when ipu3-cio2
+probes. If ov9734 probes first, ov9734_check_hwcfg() returns -ENXIO and
+the sensor never binds without a manual re-probe. Return -EPROBE_DEFER
+instead, as the other bridge-backed sensor drivers do.
+
+Tested on a Surface Laptop 2 with 7.3.4-surface, where ov9734 loads about
+0.3 s before ipu3-cio2 and now binds without a manual re-probe.
+
+Assisted-by: Claude Fable 5.2
+Signed-off-by: Sam <sammydirksz@gmail.com>
+Patchset: cameras
+---
+ drivers/media/i2c/ov9734.c | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/media/i2c/ov9734.c b/drivers/media/i2c/ov9734.c
+index 0eaf33807fc9249f01cfcbebae00ab7f9e720045..866de7f75c0c51be64361a3c64c9a88c07d9b808 100644
+--- a/drivers/media/i2c/ov9734.c
++++ b/drivers/media/i2c/ov9734.c
+@@ -836,9 +836,14 @@ static int ov9734_check_hwcfg(struct device *dev)
+ 	if (!fwnode)
+ 		return -ENXIO;
+ 
++	/*
++	 * Sometimes the fwnode graph is initialized by the bridge driver.
++	 * Bridge drivers doing this may also add GPIO mappings, wait for this.
++	 */
+ 	ep = fwnode_graph_get_next_endpoint(fwnode, NULL);
+ 	if (!ep)
+-		return -ENXIO;
++		return dev_err_probe(dev, -EPROBE_DEFER,
++				     "waiting for fwnode graph endpoint\n");
+ 
+ 	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+ 	fwnode_handle_put(ep);
+@@ -892,11 +897,9 @@ static int ov9734_probe(struct i2c_client *client)
+ 	int ret;
+ 
+ 	ret = ov9734_check_hwcfg(&client->dev);
+-	if (ret) {
+-		dev_err(&client->dev, "failed to check HW configuration: %d",
+-			ret);
+-		return ret;
+-	}
++	if (ret)
++		return dev_err_probe(&client->dev, ret,
++				     "failed to check HW configuration\n");
+ 
+ 	ov9734 = devm_kzalloc(&client->dev, sizeof(*ov9734), GFP_KERNEL);
+ 	if (!ov9734)

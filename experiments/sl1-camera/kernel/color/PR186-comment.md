@@ -1,0 +1,11 @@
+First-generation Surface Laptop confirmation: the OV9734 front color camera works on a real SL1, using the three patches in [linux-surface/linux-surface#2401](https://github.com/linux-surface/linux-surface/issues/2401). This is independent evidence for the hardware assumption in this PR. The two series are not identical, so this is not a Tested-by for `bdd5d113`.
+
+* Machine: DMI SKU `Surface_Laptop`, firmware 138.3732.768; Fedora 45 with 7.3.4-2.surface and Secure Boot enabled. `OVTI9734` / `MSHW0073`, I²C2 0x36, one lane on CSI-2 port 1, 19.2 MHz external clock. Its discrete INT3472 exposes a clock gate, reset and privacy LED.
+* The single 180 MHz link frequency plus clock/reset sequencing allowed real color capture. With a patched libcamera IPU3 pipeline and PipeWire, GNOME Camera previewed 1280×720 and independent captures returned 60 timestamped frames at 30.3–30.4 fps. Closing capture let the sensor suspend. This is the RGB sensor, not the separate OV7251.
+
+Two differences from the tested series matter when updating this PR to `v7.3-surface-devel`:
+
+1. `ov9734_check_hwcfg()` still returns `-ENXIO` if the IPU bridge hasn't created the endpoint yet. When sensor probing wins that race it may never retry. Sam's second patch in #2401 returns `-EPROBE_DEFER`; it applies on top of this PR.
+2. `DEFINE_RUNTIME_DEV_PM_OPS` also installs system-sleep callbacks. Both it and CIO2 can then change power around active-stream suspend. In #2401, the author reports a failed register write (`-121`) on SL2 after s2idle with this macro; using only `RUNTIME_PM_OPS` fixed that test. Please keep the runtime callbacks, avoid registering forced system-sleep callbacks, and test both an idle camera and an active stream across suspend on the final branch. No SL1 system-sleep result is claimed here.
+
+The SL1 results used no new regulator requests; the optional GPIO/clock sequence is sufficient for this wiring. The regulator paths and timing differences in this PR still merit their own coverage. The working color variant also compiles on current `v7.3-surface-devel` (`96cd24ea`) with `W=1`. Could the two authors consolidate the working changes in this PR? The driver changes belong in the kernel source repository; the generated `patches/*/0013-cameras.patch` need not be edited by hand.

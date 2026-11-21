@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: CC0-1.0
+frames:
+  - 0:
+      FrameDurationLimits: [33333, 33333]

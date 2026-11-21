@@ -1,0 +1,17 @@
+diff --git a/drivers/media/i2c/ov9734.c b/drivers/media/i2c/ov9734.c
+index fd0d5c9fbd0c810d83361f4ffc2d07b56603189d..92d3f43753c20579ec438971a33d00c9b71ed0e5 100644
+--- a/drivers/media/i2c/ov9734.c
++++ b/drivers/media/i2c/ov9734.c
+@@ -1052,8 +1052,10 @@ static int ov9734_probe(struct i2c_client *client)
+ 	return ret;
+ }
+ 
+-static DEFINE_RUNTIME_DEV_PM_OPS(ov9734_pm_ops, ov9734_power_off,
+-				 ov9734_power_on, NULL);
++/* The CIO2 bridge stops and restarts the sensor across system sleep. */
++static const struct dev_pm_ops ov9734_pm_ops = {
++	RUNTIME_PM_OPS(ov9734_power_off, ov9734_power_on, NULL)
++};
+ 
+ static const struct acpi_device_id ov9734_acpi_ids[] = {
+ 	{ "OVTI9734", },

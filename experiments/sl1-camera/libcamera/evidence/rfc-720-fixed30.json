@@ -1,0 +1,18 @@
+{
+  "role": "viewfinder",
+  "format": "NV12",
+  "width": 1280,
+  "height": 720,
+  "frame_duration_limits_us": [
+    33333,
+    33333
+  ],
+  "full_frames": 50,
+  "captured": 50,
+  "plane_bytes": [
+    921600,
+    460800
+  ],
+  "median_interframe_fps": 30.04,
+  "delivered_fps": 30.07
+}

@@ -1,0 +1,7 @@
+{
+  "initial_strobe": 0,
+  "strobe_during_capture": 1,
+  "strobe_after_client_sigkill": 0,
+  "off_observed_within_seconds": 0.02,
+  "service_still_active": true
+}

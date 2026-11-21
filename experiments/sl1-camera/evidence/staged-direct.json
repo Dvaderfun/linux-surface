@@ -1,0 +1,43 @@
+{
+  "kernel": "7.3.4-2.surface.fc45.x86_64",
+  "before": {
+    "exposure": 504,
+    "strobe_output_enable": 0,
+    "analogue_gain": 16,
+    "vertical_blanking": 1244
+  },
+  "passive": {
+    "frames": 10,
+    "width": 640,
+    "height": 480,
+    "fps": 30.0,
+    "sample_range": [
+      0,
+      1023
+    ],
+    "strobe_states_seen": [
+      0
+    ]
+  },
+  "illuminated": {
+    "frames": 10,
+    "width": 640,
+    "height": 480,
+    "fps": 15.0,
+    "sample_range": [
+      0,
+      1023
+    ],
+    "strobe_states_seen": [
+      0,
+      1
+    ]
+  },
+  "after": {
+    "exposure": 504,
+    "strobe_output_enable": 0,
+    "analogue_gain": 16,
+    "vertical_blanking": 1244
+  },
+  "idle_sensor": "suspended"
+}

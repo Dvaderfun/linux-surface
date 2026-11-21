@@ -1,0 +1,62 @@
+{
+  "verified": true,
+  "checks": {
+    "coherent_spatial_response": true,
+    "alternation_exceeds_off_controls": true,
+    "dark_phase_near_ambient": true,
+    "lit_phase_brighter_than_off": true
+  },
+  "controls": {
+    "strobe_schedule": [
+      0,
+      1,
+      0
+    ],
+    "exposure_lines": 400,
+    "analogue_gain_register": 128,
+    "original_exposure": 504,
+    "original_gain": 16,
+    "original_strobe": 0,
+    "restored": true
+  },
+  "timings": {
+    "off_before": {
+      "first_sequence": 9,
+      "last_sequence": 28,
+      "fps": 30.0
+    },
+    "on": {
+      "first_sequence": 37,
+      "last_sequence": 56,
+      "fps": 30.0
+    },
+    "off_after": {
+      "first_sequence": 65,
+      "last_sequence": 84,
+      "fps": 30.0
+    }
+  },
+  "units": "10-bit raw DN; matched central sensor coordinates",
+  "central_tiles_used": 13,
+  "same_phase_responding_tiles": 13,
+  "opposite_phase_tiles": 0,
+  "threshold_pass_fraction": 1.0,
+  "lit_sequence_parity": "even",
+  "center_means_DN": {
+    "off_before": 19.373,
+    "on_lit": 192.212,
+    "on_dark": 19.396,
+    "off_after": 19.265
+  },
+  "signal_delta_DN": 169.268,
+  "control_parity_p90_abs_DN": 0.117,
+  "off_even_minus_odd_DN": [
+    0.017,
+    0.064
+  ],
+  "sampled_raw_bits": 10,
+  "video": "/dev/video2",
+  "sensor": "/dev/v4l-subdev4",
+  "color_passed": true,
+  "color_result": "Opening ov9734 for 60 frames \u2026\nPASS: 60 timestamped 1280\u00d7720 frames through PipeWire at 30.4 fps; sample range 0\u2013255/255. No images saved."
+}

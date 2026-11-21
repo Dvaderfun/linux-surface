@@ -1,0 +1,15 @@
+{
+  "role": "viewfinder",
+  "format": "NV12",
+  "width": 1280,
+  "height": 704,
+  "strict_1280x720_rejected": true,
+  "full_frames": 50,
+  "captured": 50,
+  "plane_bytes": [
+    901120,
+    450560
+  ],
+  "median_interframe_fps": 15.06,
+  "delivered_fps": 16.76
+}

@@ -1,0 +1,17 @@
+diff --git a/src/ipa/libipa/camera_sensor_helper.cpp b/src/ipa/libipa/camera_sensor_helper.cpp
+index c5c8a44..1198c51 100644
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -859,7 +859,11 @@ public:
+ 		exposureMargin_ = 4;
+ 	}
+ };
+-REGISTER_CAMERA_SENSOR_HELPER(CameraSensorHelperOv5640, "ov5640")
++/*
++ * The OV9734 has the same Q4 analogue gain, 0x10 black level at ten
++ * bits, and four-line exposure margin as the OV5640.
++ */
++REGISTER_CAMERA_SENSOR_HELPER(CameraSensorHelperOv5640, "ov5640", "ov9734")
+ 
+ class CameraSensorHelperOv5647 : public CameraSensorHelper
+ {

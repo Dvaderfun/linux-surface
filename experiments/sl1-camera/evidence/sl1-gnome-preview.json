@@ -1,0 +1,37 @@
+{
+  "previews": [
+    {
+      "consumer": "org.gnome.Snapshot",
+      "source": "surface-laptop-ov7251-ir",
+      "format": {
+        "mediaType": "video",
+        "mediaSubtype": "raw",
+        "format": "YUY2",
+        "size": {
+          "width": 640,
+          "height": 480
+        },
+        "framerate": {
+          "num": 15,
+          "denom": 1
+        }
+      },
+      "strobe": 1
+    },
+    {
+      "consumer": "org.gnome.Snapshot",
+      "source": "libcamera_input.__SB_.PCI0.I2C2.CAMF",
+      "format": {
+        "mediaType": "video",
+        "mediaSubtype": "raw",
+        "format": "NV12",
+        "size": {
+          "width": 1280,
+          "height": 720
+        }
+      },
+      "strobe": 0
+    }
+  ],
+  "strobe_after_close": 0
+}

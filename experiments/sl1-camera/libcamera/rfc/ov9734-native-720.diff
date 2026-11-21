@@ -1,0 +1,55 @@
+diff --git a/src/libcamera/pipeline/ipu3/ipu3.cpp b/src/libcamera/pipeline/ipu3/ipu3.cpp
+index f7ab6c2..824a49b 100644
+--- a/src/libcamera/pipeline/ipu3/ipu3.cpp
++++ b/src/libcamera/pipeline/ipu3/ipu3.cpp
+@@ -47,6 +47,16 @@ static const ControlInfoMap::Map IPU3Controls = {
+ 	{ &controls::draft::PipelineDepth, ControlInfo(2, 3) },
+ };
+ 
++/*
++ * The OV9734 can feed its 1296x734 mode into the ImgU at 1296x732
++ * with no Bayer downscale, leaving enough filter margin for 1280x720.
++ * This combination has been validated only with a single processed stream.
++ */
++static bool ov9734SupportsHD(const CameraSensor *sensor, const Size &input)
++{
++	return input == Size(1296, 734) && sensor->model() == "ov9734";
++}
++
+ class IPU3CameraData : public Camera::Private
+ {
+ public:
+@@ -325,6 +335,10 @@ CameraConfiguration::Status IPU3CameraConfiguration::validate()
+ 
+ 			limit = utils::alignDown(cio2Configuration_.size.height - 1,
+ 						 ImgUDevice::kOutputMarginHeight);
++			if (config_.size() == 1 && cfg->size == Size(1280, 720) &&
++			    ov9734SupportsHD(data_->cio2_.sensor(), cio2Configuration_.size))
++				limit = cfg->size.height;
++
+ 			cfg->size.height = std::clamp(cfg->size.height,
+ 						      ImgUDevice::kOutputMinSize.height,
+ 						      limit);
+@@ -467,6 +481,22 @@ PipelineHandlerIPU3::generateConfiguration(Camera *camera, std::span<const Strea
+ 			return nullptr;
+ 		}
+ 
++		if (roles.size() == 1 && pixelFormat == formats::NV12 &&
++		    ov9734SupportsHD(data->cio2_.sensor(), sensorResolution)) {
++			/* Retain the aligned desktop modes and add the tested HD mode. */
++			const std::vector<Size> sizes = StreamFormats(streamFormats).sizes(pixelFormat);
++			auto &ranges = streamFormats[pixelFormat];
++			ranges.clear();
++			for (const Size &s : sizes) {
++				if (s == s.alignedDownTo(ImgUDevice::kOutputAlignWidth,
++							 ImgUDevice::kOutputAlignHeight))
++					ranges.emplace_back(s);
++			}
++			ranges.emplace_back(size);
++			size = { 1280, 720 };
++			ranges.emplace_back(size);
++		}
++
+ 		StreamFormats formats(streamFormats);
+ 		StreamConfiguration cfg(formats);
+ 		cfg.size = size;

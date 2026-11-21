@@ -1,0 +1,242 @@
+--- a/drivers/media/i2c/ov7251.c
++++ b/drivers/media/i2c/ov7251.c
+@@ -6,7 +6,9 @@
+  * Copyright (c) 2017-2018, Linaro Ltd.
+  */
+ 
++#include <linux/acpi.h>
+ #include <linux/bitops.h>
++#include <linux/dmi.h>
+ #include <linux/clk.h>
+ #include <linux/delay.h>
+ #include <linux/device.h>
+@@ -18,6 +20,7 @@
+ #include <linux/regulator/consumer.h>
+ #include <linux/slab.h>
+ #include <linux/types.h>
++#include <linux/unaligned.h>
+ #include <media/v4l2-ctrls.h>
+ #include <media/v4l2-fwnode.h>
+ #include <media/v4l2-subdev.h>
+@@ -53,6 +56,18 @@
+ #define OV7251_PLL2_SYS_DIV_REG		0x309a
+ #define OV7251_PLL2_ADC_DIV_REG		0x309b
+ 
++/* OV7251 STROBE, Antoine Pichot, linux-media v3 8/9. */
++#define OV7251_SC_REG5                   0x3005
++#define OV7251_SC_REG5_STROBE_OE         BIT(3)
++#define OV7251_STROBE_FRAME_PATTERN      0x3b81
++#define OV7251_STROBE_FRAME_PATTERN_ALT  0xaa
++#define OV7251_STROBE_FRAME_PATTERN_DEF  0xa5
++#define OV7251_STROBE_FRAME_SPAN         0x3b8c
++#define OV7251_STROBE_FRAME_SPAN_DEF     0x1a
++#define OV7251_STROBE_SPAN_MIN           52
++#define OV7251_STROBE_SPAN_MAX           776
++#define OV7251_STROBE_MAX_DUTY_PERCENT   45
++
+ #define OV7251_NATIVE_WIDTH		656
+ #define OV7251_NATIVE_HEIGHT		496
+ #define OV7251_ACTIVE_START_LEFT	4
+@@ -147,6 +162,9 @@
+ 	struct v4l2_ctrl *gain;
+ 	struct v4l2_ctrl *hblank;
+ 	struct v4l2_ctrl *vblank;
++	struct v4l2_ctrl *strobe;
++	bool strobe_stream_ready;
++	bool strobe_live;
+ 
+ 	/* Cached register values */
+ 	u8 aec_pk_manual;
+@@ -744,6 +762,8 @@
+ 	regbuf[2] = val;
+ 
+ 	ret = i2c_master_send(ov7251->i2c_client, regbuf, 3);
++	if (ret >= 0 && ret != 3)
++		ret = -EIO;
+ 	if (ret < 0) {
+ 		dev_err(ov7251->dev, "%s: write reg error %d: reg=%x, val=%x\n",
+ 			__func__, ret, reg, val);
+@@ -756,7 +776,7 @@
+ static int ov7251_write_seq_regs(struct ov7251 *ov7251, u16 reg, u8 *val,
+ 				 u8 num)
+ {
+-	u8 regbuf[5];
++	u8 regbuf[6];
+ 	u8 nregbuf = sizeof(reg) + num * sizeof(*val);
+ 	int ret = 0;
+ 
+@@ -769,6 +789,8 @@
+ 	memcpy(regbuf + 2, val, num);
+ 
+ 	ret = i2c_master_send(ov7251->i2c_client, regbuf, nregbuf);
++	if (ret >= 0 && ret != nregbuf)
++		ret = -EIO;
+ 	if (ret < 0) {
+ 		dev_err(ov7251->dev,
+ 			"%s: write seq regs error %d: first reg=%x\n",
+@@ -1023,10 +1045,74 @@
+ 	return ov7251_write_seq_regs(ov7251, OV7251_TIMING_VTS_REG, vts, 2);
+ }
+ 
++/* Limit this external-module backport to the verified SL1 firmware module. */
++static bool ov7251_has_sl1_strobe(struct ov7251 *ov7251)
++{
++	struct acpi_device *adev = ACPI_COMPANION(ov7251->dev);
++	const char *sub;
++	bool supported;
++
++	if (!adev || strcmp(acpi_device_hid(adev), "INT347E") ||
++	    !dmi_match(DMI_SYS_VENDOR, "Microsoft Corporation") ||
++	    !dmi_match(DMI_PRODUCT_NAME, "Surface Laptop") ||
++	    !dmi_match(DMI_PRODUCT_SKU, "Surface_Laptop"))
++		return false;
++
++	sub = acpi_get_subsystem_id(adev->handle);
++	if (IS_ERR_OR_NULL(sub))
++		return false;
++	supported = !strcmp(sub, "MSHW0074");
++	kfree(sub);
++	return supported;
++}
++
++static int ov7251_disable_strobe_pad(struct ov7251 *ov7251)
++{
++	int ret = ov7251_write_reg(ov7251, OV7251_SC_REG5, 0);
++
++	if (!ret)
++		ov7251->strobe_live = false;
++	return ret;
++}
++
++static int ov7251_set_strobe(struct ov7251 *ov7251, bool enabled)
++{
++	u8 val[4];
++	int span = OV7251_STROBE_FRAME_SPAN_DEF;
++	int ret, vts;
++
++	/* Program the pattern and bounded span with the output gated off. */
++	ret = ov7251_disable_strobe_pad(ov7251);
++	if (ret)
++		return ret;
++	if (enabled) {
++		vts = ov7251->current_mode->height + ov7251->vblank->val;
++		span = min(clamp(ov7251->exposure->val, OV7251_STROBE_SPAN_MIN,
++				 OV7251_STROBE_SPAN_MAX),
++			   vts * OV7251_STROBE_MAX_DUTY_PERCENT / 100);
++	}
++	ret = ov7251_write_reg(ov7251, OV7251_STROBE_FRAME_PATTERN,
++			       enabled ? OV7251_STROBE_FRAME_PATTERN_ALT :
++					 OV7251_STROBE_FRAME_PATTERN_DEF);
++	if (ret)
++		return ret;
++	put_unaligned_be32(span, val);
++	ret = ov7251_write_seq_regs(ov7251, OV7251_STROBE_FRAME_SPAN, val, sizeof(val));
++	if (ret || !enabled)
++		return ret;
++	ret = ov7251_write_reg(ov7251, OV7251_SC_REG5, OV7251_SC_REG5_STROBE_OE);
++	if (ret)
++		ov7251_disable_strobe_pad(ov7251);
++	else
++		ov7251->strobe_live = true;
++	return ret;
++}
++
+ static int ov7251_s_ctrl(struct v4l2_ctrl *ctrl)
+ {
+ 	struct ov7251 *ov7251 = container_of(ctrl->handler,
+ 					     struct ov7251, ctrls);
++	bool resume_strobe;
+ 	int ret;
+ 
+ 	/* If VBLANK is altered we need to update exposure to compensate */
+@@ -1048,7 +1134,20 @@
+ 	if (!pm_runtime_get_if_in_use(ov7251->dev))
+ 		return 0;
+ 
++	/* A shorter frame must never use the previously longer pulse. */
++	resume_strobe = ov7251->strobe_live &&
++		(ctrl->id == V4L2_CID_EXPOSURE || ctrl->id == V4L2_CID_VBLANK);
++	if (resume_strobe) {
++		ret = ov7251_disable_strobe_pad(ov7251);
++		if (ret)
++			goto out_pm;
++	}
++
+ 	switch (ctrl->id) {
++	case V4L2_CID_FLASH_STROBE_OE:
++		ret = ov7251->strobe_stream_ready ?
++			ov7251_set_strobe(ov7251, ctrl->val) : 0;
++		break;
+ 	case V4L2_CID_EXPOSURE:
+ 		ret = ov7251_set_exposure(ov7251, ctrl->val);
+ 		break;
+@@ -1072,6 +1171,9 @@
+ 		break;
+ 	}
+ 
++	if (!ret && resume_strobe)
++		ret = ov7251_set_strobe(ov7251, true);
++out_pm:
+ 	pm_runtime_put(ov7251->dev);
+ 
+ 	return ret;
+@@ -1362,6 +1464,7 @@
+ 				ov7251->current_mode->height);
+ 			goto err_power_down;
+ 		}
++		ov7251->strobe_stream_ready = true;
+ 		ret = __v4l2_ctrl_handler_setup(&ov7251->ctrls);
+ 		if (ret < 0) {
+ 			dev_err(ov7251->dev, "could not sync v4l2 controls\n");
+@@ -1372,8 +1475,18 @@
+ 		if (ret)
+ 			goto err_power_down;
+ 	} else {
++		int gate_ret = 0;
++
++		ov7251->strobe_stream_ready = false;
++		if (ov7251->strobe) {
++			gate_ret = ov7251_disable_strobe_pad(ov7251);
++			/* A crashed client must not arm the following stream. */
++			__v4l2_ctrl_s_ctrl(ov7251->strobe, 0);
++		}
+ 		ret = ov7251_write_reg(ov7251, OV7251_SC_MODE_SELECT,
+ 				       OV7251_SC_MODE_SELECT_SW_STANDBY);
++		if (!ret)
++			ret = gate_ret;
+ 		pm_runtime_put(ov7251->dev);
+ 	}
+ 
+@@ -1381,6 +1494,11 @@
+ 	return ret;
+ 
+ err_power_down:
++	ov7251->strobe_stream_ready = false;
++	if (ov7251->strobe) {
++		ov7251_disable_strobe_pad(ov7251);
++		__v4l2_ctrl_s_ctrl(ov7251->strobe, 0);
++	}
+ 	pm_runtime_put(ov7251->dev);
+ 	mutex_unlock(&ov7251->lock);
+ 	return ret;
+@@ -1568,7 +1686,7 @@
+ 	s64 pixel_rate;
+ 	int hblank;
+ 
+-	v4l2_ctrl_handler_init(&ov7251->ctrls, 7);
++	v4l2_ctrl_handler_init(&ov7251->ctrls, 10);
+ 	ov7251->ctrls.lock = &ov7251->lock;
+ 
+ 	v4l2_ctrl_new_std(&ov7251->ctrls, &ov7251_ctrl_ops,
+@@ -1615,6 +1733,11 @@
+ 					   OV7251_TIMING_MIN_VTS, vblank_max, 1,
+ 					   vblank_def);
+ 
++	if (ov7251_has_sl1_strobe(ov7251))
++		ov7251->strobe = v4l2_ctrl_new_std(&ov7251->ctrls, &ov7251_ctrl_ops,
++						   V4L2_CID_FLASH_STROBE_OE,
++						   0, 1, 1, 0);
++
+ 	ov7251->sd.ctrl_handler = &ov7251->ctrls;
+ 
+ 	if (ov7251->ctrls.error) {
